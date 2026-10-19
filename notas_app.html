@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#3157d5">
+<title>Notas — Mi espacio</title>
+<style>
+:root{--bg:#f4f6fb;--panel:#fff;--text:#202536;--muted:#70788d;--line:#e5e8f0;--accent:#3157d5;--soft:#eaf0ff;--danger:#c43d4b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5;padding:16px max(16px,calc((100vw - 1050px)/2))}
+.top{display:flex;align-items:center;gap:12px;justify-content:space-between}.brand{font-size:1.25rem;font-weight:800;letter-spacing:-.4px}.brand span{color:var(--accent)}
+button,input,textarea{font:inherit}button{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:var(--soft);color:var(--accent);font-weight:650}button.primary{background:var(--accent);color:#fff}button.ghost{background:transparent;color:var(--muted)}button.danger{color:var(--danger);background:#fff0f1}
+main{max-width:1050px;margin:24px auto;padding:0 16px}.toolbar{display:flex;gap:10px;margin-bottom:20px}.search{flex:1;min-width:0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);outline-color:var(--accent)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:18px;align-items:start}.notes-head{display:flex;align-items:center;justify-content:space-between;margin:4px 0 12px}.muted{color:var(--muted);font-size:.9rem}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;min-height:150px;display:flex;flex-direction:column;gap:8px;box-shadow:0 2px 8px #18234a05}.card h3{margin:0;font-size:1.02rem;overflow-wrap:anywhere}.card p{margin:0;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}.card footer{margin-top:auto;padding-top:10px;display:flex;align-items:center;justify-content:space-between;gap:6px}.card small{color:var(--muted)}.pin{font-size:.8rem;color:var(--accent);background:var(--soft);border-radius:20px;padding:3px 8px}
+.editor{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;position:sticky;top:90px}.editor h2{font-size:1.05rem;margin:0 0 12px}.field{width:100%;border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:10px;background:var(--panel);color:var(--text);outline-color:var(--accent)}textarea.field{resize:vertical;min-height:190px}.editor-actions{display:flex;flex-wrap:wrap;gap:8px}.empty{padding:34px 12px;text-align:center;color:var(--muted);background:var(--panel);border:1px dashed var(--line);border-radius:16px}
+footer.appfoot{text-align:center;color:var(--muted);font-size:.82rem;padding:24px 12px}
+body.dark{--bg:#151923;--panel:#202634;--text:#f1f3f9;--muted:#a3abc0;--line:#343c4d;--accent:#8da8ff;--soft:#2d3a5c;--danger:#ff8d98}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.editor{position:static;grid-row:1}.grid{grid-template-columns:repeat(auto-fill,minmax(155px,1fr))}.top{flex-wrap:wrap}main{margin-top:16px}}
+</style>
+</head>
+<body>
+<header><div class="top"><div class="brand">✦ <span>Notas</span> <span style="color:var(--muted);font-weight:500">/ Mi espacio</span></div><div><button id="themeBtn" class="ghost" title="Cambiar tema">☾ Tema</button> <button id="exportBtn">Exportar</button></div></div></header>
+<main>
+  <div class="toolbar"><input id="search" class="search" type="search" placeholder="Buscar notas..." aria-label="Buscar notas"><button class="primary" id="newBtn">＋ Nueva nota</button></div>
+  <div class="layout">
+    <section><div class="notes-head"><strong>Tus notas</strong><span id="count" class="muted">0 notas</span></div><div id="notes" class="grid"></div></section>
+    <section class="editor" aria-label="Editor de notas">
+      <h2 id="editorHeading">Crear una nota</h2>
+      <input id="title" class="field" maxlength="120" placeholder="Título de la nota">
+      <textarea id="body" class="field" placeholder="Escribe aquí lo que quieras recordar..."></textarea>
+      <div class="editor-actions"><button class="primary" id="saveBtn">Guardar nota</button><button id="pinBtn">☆ Fijar</button><button class="ghost" id="clearBtn">Limpiar</button><button class="danger" id="deleteBtn" hidden>Eliminar</button></div>
+      <p class="muted">Tus notas se guardan automáticamente en este navegador al pulsar “Guardar nota”. No necesitas una cuenta.</p>
+    </section>
+  </div>
+</main>
+<footer class="appfoot">Notas · Tus ideas, en un solo lugar.</footer>
+<script>
+const $ = id => document.getElementById(id);
+const STORAGE_KEY = 'mi-espacio-notas-v1';
+let notes = [];
+let activeId = null;
+let pinned = false;
+try { notes = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); if (!Array.isArray(notes)) notes = []; } catch { notes = []; }
+
+function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(notes)); render(); }
+function safeDate(value){ try { return new Date(value).toLocaleDateString('es-UY',{day:'2-digit',month:'short',year:'numeric'}); } catch { return ''; } }
+function render(){
+  const q = $('search').value.trim().toLowerCase();
+  const visible = notes.filter(n => (n.title+' '+n.body).toLowerCase().includes(q))
+    .sort((a,b) => Number(b.pinned)-Number(a.pinned) || b.updated-a.updated);
+  $('count').textContent = `${visible.length} ${visible.length===1?'nota':'notas'}`;
+  const root = $('notes'); root.replaceChildren();
+  if (!visible.length){ const empty=document.createElement('div'); empty.className='empty'; empty.style.gridColumn='1/-1'; empty.textContent=q?'No hay notas que coincidan con tu búsqueda.':'Todavía no hay notas. ¡Crea la primera!'; root.append(empty); return; }
+  visible.forEach(n=>{
+    const card=document.createElement('article'); card.className='card';
+    const h=document.createElement('h3'); h.textContent=n.title || 'Sin título';
+    const p=document.createElement('p'); p.textContent=n.body || 'Nota vacía';
+    const meta=document.createElement('div'); if(n.pinned){const badge=document.createElement('span');badge.className='pin';badge.textContent='★ Fijada';meta.append(badge);}
+    const foot=document.createElement('footer'); const date=document.createElement('small');date.textContent=safeDate(n.updated);
+    const edit=document.createElement('button');edit.textContent='Editar';edit.addEventListener('click',()=>loadNote(n.id));
+    foot.append(date,edit);card.append(meta,h,p,foot);root.append(card);
+  });
+}
+function clearEditor(){
+  activeId=null;pinned=false;$('title').value='';$('body').value='';
+  $('editorHeading').textContent='Crear una nota';$('saveBtn').textContent='Guardar nota';
+  $('pinBtn').textContent='☆ Fijar';$('deleteBtn').hidden=true;
+}
+function loadNote(id){
+  const n=notes.find(x=>x.id===id);if(!n)return;
+  activeId=n.id;pinned=!!n.pinned;$('title').value=n.title;$('body').value=n.body;
+  $('editorHeading').textContent='Editar nota';$('saveBtn').textContent='Guardar cambios';
+  $('pinBtn').textContent=pinned?'★ Desfijar':'☆ Fijar';$('deleteBtn').hidden=false;
+  if(window.innerWidth<760) $('title').scrollIntoView({behavior:'smooth',block:'center'});
+}
+$('saveBtn').addEventListener('click',()=>{
+  const title=$('title').value.trim(), body=$('body').value.trim();
+  if(!title&&!body){alert('Escribe un título o contenido antes de guardar.');return;}
+  const now=Date.now();
+  if(activeId){const n=notes.find(x=>x.id===activeId);if(n){n.title=title;n.body=body;n.pinned=pinned;n.updated=now;}}
+  else notes.push({id: (crypto.randomUUID?crypto.randomUUID():String(now)+Math.random()),title,body,pinned,created:now,updated:now});
+  persist();clearEditor();
+});
+$('newBtn').addEventListener('click',()=>{clearEditor();$('title').focus();});
+$('clearBtn').addEventListener('click',clearEditor);
+$('pinBtn').addEventListener('click',()=>{pinned=!pinned;$('pinBtn').textContent=pinned?'★ Desfijar':'☆ Fijar';});
+$('deleteBtn').addEventListener('click',()=>{
+  if(!activeId)return;
+  if(confirm('¿Eliminar esta nota? Esta acción no se puede deshacer.')){notes=notes.filter(n=>n.id!==activeId);persist();clearEditor();}
+});
+$('search').addEventListener('input',render);
+$('themeBtn').addEventListener('click',()=>{document.body.classList.toggle('dark');const dark=document.body.classList.contains('dark');$('themeBtn').textContent=dark?'☀ Tema':'☾ Tema';localStorage.setItem('mi-espacio-tema',dark?'dark':'light');});
+if(localStorage.getItem('mi-espacio-tema')==='dark'){document.body.classList.add('dark');$('themeBtn').textContent='☀ Tema';}
+$('exportBtn').addEventListener('click',()=>{
+  const blob=new Blob([JSON.stringify(notes,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='mis-notas.json';a.click();URL.revokeObjectURL(url);
+});
+render();
+</script>
+</body>
+</html>
